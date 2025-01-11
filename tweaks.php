@@ -1,10 +1,33 @@
 <?php
 // modification.php
-class Custom_UpdateServer extends Wpup_UpdateServer {
+class custom_UpdateServer extends Wpup_UpdateServer {
+
+    // Constructor to override default directories
+    public function __construct($serverUrl = null, $serverDirectory = null) {
+        if ($serverDirectory === null) {
+            // Set custom directory outside the HTTP root.
+            $serverDirectory = '/home/user/plugin-updates';
+        }
+        parent::__construct($serverUrl, $serverDirectory);
+
+        // Override the package, logs, and asset directories with custom paths.
+        $this->packageDirectory = $serverDirectory . '/custom-packages';
+        $this->logDirectory = $serverDirectory . '/custom-logs';
+
+        $this->bannerDirectory = $serverDirectory . '/custom-assets/banners';
+        $this->assetDirectories = array(
+            'banners' => $this->bannerDirectory,
+            'icons'   => $serverDirectory . '/custom-assets/icons',
+        );
+
+        // Optionally, you can set a custom cache directory as well.
+        $this->cache = new Wpup_FileCache($serverDirectory . '/custom-cache');
+    }
     
+
     protected function findPackage($slug) {
         // Define the suffix to be removed
-        $removeSuffix = '-example';
+        $removeSuffix = '-rupninja';
 
         // Sanitize the slug to ensure it's safe for file handling
         $safeSlug = preg_replace('@[^a-z0-9\-_\.,+!]@i', '', $slug);
@@ -14,7 +37,6 @@ class Custom_UpdateServer extends Wpup_UpdateServer {
             $safeSlug = substr($safeSlug, 0, -strlen($removeSuffix));
         }
 
-
         // List of slugs that should never be served
         $neverServe = array('blacklisted-plugin', 'restricted-plugin', 'test-plugin');
         if (in_array($safeSlug, $neverServe)) {
@@ -23,8 +45,8 @@ class Custom_UpdateServer extends Wpup_UpdateServer {
 
         // Check known routes for specific slug-to-filename mappings
         $knownRoutes = array(
-            'burt' => 'someplugin.zip',
-            'alternate-slug' => 'actual-plugin-name.zip',
+            'burt' => 'frames-plugin.zip',
+            //'wpcodebox' => 'wpcodebox2.zip',
             'custom-slug'    => 'different-plugin-name.zip',
             'another-slug'   => 'specific-package.zip',
         );
