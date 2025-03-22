@@ -26,16 +26,29 @@ class custom_UpdateServer extends Wpup_UpdateServer {
     
 
     protected function findPackage($slug) {
-        // Define the suffix to be removed
-        $removeSuffix = '-rupninja';
+        // Define an array of suffixes to be removed
+        /*
+         * To add new suffixes:
+         * 1. Add a new string to the $suffixes array, following the same format.
+         * 2. Example: '-example', '-v2', '-free'
+         * 3. Each suffix should be a unique string that identifies a pattern to be removed.
+         */
+        $suffixes = [
+            '-rupninja'
+        ];
 
         // Sanitize the slug to ensure it's safe for file handling
         $safeSlug = preg_replace('@[^a-z0-9\-_\.,+!]@i', '', $slug);
 
-        // Check if the slug ends with the suffix and remove it
-        if (substr($safeSlug, -strlen($removeSuffix)) === $removeSuffix) {
-            $safeSlug = substr($safeSlug, 0, -strlen($removeSuffix));
-        }
+        // Loop through each suffix and check if the slug ends with it
+        foreach ($suffixes as $suffix) {
+            if (substr($safeSlug, -strlen($suffix)) === $suffix) {
+                // Remove the suffix from the slug
+                $safeSlug = substr($safeSlug, 0, -strlen($suffix));
+                break; // Stop once a match is found
+            }
+        }       
+
 
         // List of slugs that should never be served
         $neverServe = array('blacklisted-plugin', 'restricted-plugin', 'test-plugin');
