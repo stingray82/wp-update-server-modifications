@@ -107,4 +107,103 @@ class custom_UpdateServer extends Wpup_UpdateServer {
         // If no files are found, return null
         return null;
     }
+
+    protected function generateDownloadUrl(Wpup_Package $package) {
+        $this->cleanupExpiredTokens($package->slug);
+        $token = bin2hex(random_bytes(16));
+        $this->storeDownloadToken($package->slug, $token, time() + 43200, 2);
+
+        $query = array(
+            'action' => 'download',
+            'slug'   => $package->slug,
+            'token'  => $token,
+        );
+        return self::addQueryArg($query, $this->serverUrl);
+    }
+
+    protected function storeDownloadToken($slug, $token, $expiry, $maxDownloads) {
+        $data = array(
+            'expiry' => $expiry,
+            'downloads' => 0,
+            'max_downloads' => $maxDownloads,
+        );
+
+        $tokensFile = $this->serverDirectory . "/tokens/{$slug}.json";
+        $tokens = file_exists($tokensFile) ? json_decode(file_get_contents($tokensFile), true) : array();
+        $tokens[$token] = $data;
+        file_put_contents($tokensFile, json_encode($tokens));
+    }
+
+    protected function isValidDownloadToken($slug, $token) {
+        $this->cleanupExpiredTokens($slug);
+        $tokensFile = $this->serverDirectory . "/tokens/{$slug}.json";
+        if (!file_exists($tokensFile)) {
+            return false;
+        }
+
+        $tokens = json_decode(file_get_contents($tokensFile), true);
+        if (!isset($tokens[$token])) {
+            return false;
+        }
+
+        $data = $tokens[$token];
+        if (time() > $data['expiry'] || $data['downloads'] >= $data['max_downloads']) {
+            unset($tokens[$token]);
+            file_put_contents($tokensFile, json_encode($tokens));
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function cleanupExpiredTokens($slug) {
+        $tokensFile = $this->serverDirectory . "/tokens/{$slug}.json";
+        if (!file_exists($tokensFile)) {
+            return;
+        }
+
+        $tokens = json_decode(file_get_contents($tokensFile), true);
+        $changed = false;
+
+        foreach ($tokens as $token => $data) {
+            if (time() > $data['expiry'] || $data['downloads'] >= $data['max_downloads']) {
+                unset($tokens[$token]);
+                $changed = true;
+            }
+        }
+
+        if ($changed) {
+            file_put_contents($tokensFile, json_encode($tokens));
+        }
+    }
+
+    protected function incrementDownloadCount($slug, $token) {
+        $tokensFile = $this->serverDirectory . "/tokens/{$slug}.json";
+        $tokens = json_decode(file_get_contents($tokensFile), true);
+        if (isset($tokens[$token])) {
+            $tokens[$token]['downloads'] += 1;
+            if ($tokens[$token]['downloads'] >= $tokens[$token]['max_downloads']) {
+                unset($tokens[$token]);
+            }
+            file_put_contents($tokensFile, json_encode($tokens));
+        }
+    }
+
+    protected function actionDownload(Wpup_Request $request) {
+        $token = $request->param('token');
+        $slug = $request->param('slug');
+
+        if (!$this->isValidDownloadToken($slug, $token)) {
+            $this->exitWithError('Invalid or expired download token.', 403);
+        }
+
+        $package = $request->package;
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . $package->slug . '.zip"');
+        header('Content-Transfer-Encoding: binary');
+        header('Content-Length: ' . $package->getFileSize());
+
+        readfile($package->getFilename());
+        $this->incrementDownloadCount($slug, $token);
+    }
 }
